@@ -26,6 +26,9 @@ jobs:
           GEMINI_EMBEDDING_MODEL: ${{ secrets.GEMINI_EMBEDDING_MODEL }}
           GEMINI_REASONING_MODEL: ${{ secrets.GEMINI_REASONING_MODEL }}
           RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
+          # v3.6: WWR default OFF (account wall). Untuk mengaktifkan: repo Settings ->
+          # Secrets and variables -> Actions -> Variables -> tambah ENABLE_WWR = 1
+          ENABLE_WWR: ${{ vars.ENABLE_WWR }}
         run: python ingest.py
 
       - name: Run Matching

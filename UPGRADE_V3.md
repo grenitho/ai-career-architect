@@ -178,3 +178,27 @@ sunyi, tidak bisa dibedakan dari "hari ini tidak ada match".
   pesan 🚨 ke Telegram berisi link langsung ke log run yang gagal.
 - Memakai secrets Telegram yang sudah ada; tidak ada secret/env baru.
 - Kalau step alert-nya sendiri gagal, tidak memicu error berantai (`|| true`).
+
+---
+
+## Update v3.6 (9 Okt 2026) — We Work Remotely dinonaktifkan (account wall)
+
+Kasus nyata: lowongan skor **90** (Software Developer AI Coding — STEUART NUTRITION,
+🌍 Worldwide, $90–120k) masuk Telegram, tapi saat dibuka **tidak bisa dilamar** —
+halaman WWR kini meminta "Create an account to view full job details" (berbayar
+menurut pengalaman user). WWR menyumbang ~48% volume mentah (413 dari 853) —
+notifikasi darinya berisiko jadi dead-end yang merebut slot Top-15.
+
+- **WWR OFF secara default** (`ENABLE_WWR` env / repo variable; default kosong = off).
+  Log akan menampilkan `We Work Remotely: DILEWATI (account wall...)`.
+  Aktifkan lagi bila kamu punya/punya-akan akun WWR: GitHub repo → Settings →
+  Secrets and variables → Actions → **Variables** → tambah `ENABLE_WWR` = `1`.
+- **Label sumber 📡 di pesan Telegram** (notifier): setiap lowongan kini menampilkan
+  asal board-nya (RemoteOK/Himalayas/JSearch/HN...) — dead-end seperti ini langsung
+  kelihatan tanpa harus klik linknya dulu.
+- Dampak volume: mentah ~853 → ~440/run, tapi **semua yang tersisa bisa dilamar**.
+  Lowongan yang cross-post (ada di WWR DAN board lain) tetap tertangkap lewat board
+  lain — dedup judul+perusahaan justru otomatis memilih URL dari sumber yang terbuka.
+- Tips manual: lowongan WWR sering di-mirror lengkap (termasuk JD penuh & link asli)
+  di theohub.global / jobleads — bisa dipakai untuk MEMBACA JD walau apply-nya
+  lewat situs perusahaan langsung.

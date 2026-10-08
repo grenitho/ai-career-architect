@@ -55,6 +55,11 @@ SEEN_RETENTION_DAYS = int(os.getenv("SEEN_RETENTION_DAYS", "45"))
 DISABLED_SOURCES = {
     s.strip().lower() for s in os.getenv("DISABLED_SOURCES", "").split(",") if s.strip()
 }
+# v3.6: We Work Remotely OFF secara default — halaman lowongannya kini di balik
+# account wall ("Create an account to view full job details"), sehingga notifikasi
+# dari WWR berisiko jadi dead-end yang tidak bisa dilamar. Aktifkan lagi dengan
+# ENABLE_WWR=1 (env / repo variable) bila kamu punya akun WWR.
+ENABLE_WWR = os.getenv("ENABLE_WWR", "").strip().lower() in ("1", "true", "yes")
 
 UA = {"User-Agent": "Mozilla/5.0 (compatible; JobHuntBot/2.0; personal use)"}
 
@@ -251,7 +256,11 @@ def fetch_remotive(query: str) -> List[Dict[str, Any]]:
 
 def fetch_weworkremotely() -> List[Dict[str, Any]]:
     """RSS We Work Remotely. Judul berformat 'Perusahaan: Judul', dan ada tag <region>
-    (mis. 'Anywhere in the World') yang sangat berguna untuk filter worldwide."""
+    (mis. 'Anywhere in the World') yang sangat berguna untuk filter worldwide.
+    v3.6: default NONAKTIF (account wall untuk pelamar) — lihat ENABLE_WWR."""
+    if not ENABLE_WWR:
+        print("      -> We Work Remotely: DILEWATI (account wall; set ENABLE_WWR=1 untuk mengaktifkan)")
+        return []
     print("      -> We Work Remotely (RSS)...")
     jobs = []
     for feed in WWR_FEEDS:

@@ -89,6 +89,7 @@ def build_job_block(index: int, job: Dict[str, Any]) -> str:
     lines.append(
         f"   🏢 {clip(job['company'], 60)}"
         + (f" | {esc(track_tag)}" if track_tag else "")
+        + (f" | 📡 {esc(job.get('source') or '')}" if job.get("source") else "")
     )
     lines.append(f"   📊 <b>Skor:</b> {score}/100" + (f" | {region}" if region else ""))
     lines.append("   💡 <b>Mengapa Cocok:</b>")
@@ -170,7 +171,7 @@ def format_and_notify():
     # di-ingest kemarin tetap terkirim.
     response = (
         supabase.table("daily_jobs")
-        .select("id, job_title, company, match_score, ai_reasoning, apply_url, track")
+        .select("id, job_title, company, match_score, ai_reasoning, apply_url, track, source")
         .eq("analyzed", True)
         .eq("notified", False)
         .gte("match_score", MIN_NOTIFY_SCORE)

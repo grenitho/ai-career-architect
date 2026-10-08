@@ -17,8 +17,10 @@ each job and explain *why* it fits — delivered to Telegram.
 | D. Notify (daily) | `notifier.py` | Top jobs (score ≥ threshold) → formatted Telegram message; sends a status message even when nothing qualifies |
 
 Job sources (all free, only JSearch needs a key): Himalayas, Jobicy, RemoteOK, Arbeitnow,
-We Work Remotely (main RSS + 5 category feeds), Remotive, Working Nomads, n8n Community (RSS),
-Hacker News "Who's Hiring" (monthly thread via Algolia), JSearch/RapidAPI (rotated daily queries).
+Remotive, Working Nomads, n8n Community (RSS), Hacker News "Who's Hiring" (monthly thread
+via Algolia), JSearch/RapidAPI (rotated daily queries). We Work Remotely (main RSS + 5
+category feeds) is included but **off by default** — its listing pages now sit behind a
+job-seeker account wall; set `ENABLE_WWR=1` if you have an account.
 
 ## Setup (new installation)
 
