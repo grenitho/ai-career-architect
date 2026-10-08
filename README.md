@@ -15,6 +15,7 @@ each job and explain *why* it fits — delivered to Telegram.
 | B. Ingest (daily) | `ingest.py` | Pull jobs from 9 free sources → cheap filters → route to tracks → embed → similarity gate → `daily_jobs` |
 | C. Reasoning (daily) | `main.py` | For each new job: vector-search your knowledge → Gemini scores 0–100 + match reasons + skill gap + interview talking points |
 | D. Notify (daily) | `notifier.py` | Top jobs (score ≥ threshold) → formatted Telegram message; sends a status message even when nothing qualifies |
+| D.5 Resolve (daily, v3.7) | `resolver.py` | Verifies apply links of top jobs; for paywalled/dead links finds company careers page, contact email, and cross-posts automatically |
 
 Job sources (all free, only JSearch needs a key): Himalayas, Jobicy, RemoteOK, Arbeitnow,
 Remotive, Working Nomads, n8n Community (RSS), Hacker News "Who's Hiring" (monthly thread

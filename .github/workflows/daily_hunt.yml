@@ -47,6 +47,10 @@ jobs:
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          # v3.7: resolver jalur apply (cross-post butuh JSearch; matikan via
+          # repo variable RESOLVE_APPLY_LINKS=0 bila tidak diinginkan)
+          RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
+          RESOLVE_APPLY_LINKS: ${{ vars.RESOLVE_APPLY_LINKS }}
         run: python notifier.py
 
       # v3.5: kalau run GAGAL (error kode, Supabase down, kuota habis, dsb.),

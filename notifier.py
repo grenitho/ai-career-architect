@@ -4,11 +4,18 @@ import html
 import time
 import requests
 from datetime import date
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from dotenv import load_dotenv
 
 from db import supabase, mark_jobs_notified
 from tracks import TRACKS
+from resolver import (
+    RESOLVE_ENABLED,
+    RESOLVE_MAX_JOBS,
+    RESOLVE_MAX_PROBES,
+    RESOLVE_MAX_JSEARCH,
+    resolve_job,
+)
 
 load_dotenv()
 
@@ -66,7 +73,7 @@ def send_telegram_message(message: str) -> bool:
         return False
 
 
-def build_job_block(index: int, job: Dict[str, Any]) -> str:
+def build_job_block(index: int, job: Dict[str, Any], resolution: Optional[Dict[str, Any]] = None) -> str:
     score = job["match_score"]
     reasoning = job.get("ai_reasoning") or {}
     if isinstance(reasoning, str):
@@ -103,9 +110,24 @@ def build_job_block(index: int, job: Dict[str, Any]) -> str:
     if isinstance(talking, list) and talking:
         lines.append(f'   🗣️ <b>Talking Point:</b> "{clip(talking[0])}"')
     url = esc(job.get("apply_url", ""))
-    lines.append(
-        f'   🔗 <a href="{url}">Apply Here</a>' if url else "   🔗 Link tidak tersedia"
-    )
+    status = (resolution or {}).get("status")
+    if status in ("wall", "dead", "missing"):
+        # v3.7: link utama bermasalah — tampilkan peringatan + jalur alternatif.
+        label = {"wall": "butuh akun/berbayar", "dead": "link mati", "missing": "tanpa link"}[status]
+        lines.append(f"   ⚠️ Link utama <b>{label}</b> ({esc((resolution or {}).get('evidence', ''))[:40]}) — jalur alternatif:")
+        if url:
+            lines.append(f'   🔗 <a href="{url}">Link asli (cek manual)</a>')
+    else:
+        lines.append(
+            f'   🔗 <a href="{url}">Apply Here</a>' if url else "   🔗 Link tidak tersedia"
+        )
+    if resolution:
+        if resolution.get("careers"):
+            lines.append(f'   🏢 <a href="{esc(resolution["careers"])}">Halaman karir perusahaan</a>')
+        if resolution.get("email"):
+            lines.append(f"   📧 Kontak langsung: <b>{esc(resolution['email'])}</b>")
+        if resolution.get("crosspost"):
+            lines.append(f'   🔁 <a href="{esc(resolution["crosspost"])}">Cross-post / mirror</a>')
     lines.append("━━━━━━━━━━━━━━━━━━━━")
     return "\n".join(lines) + "\n"
 
@@ -185,7 +207,24 @@ def format_and_notify():
         _send_empty_status(today)
         return
 
-    blocks = [build_job_block(i, j) for i, j in enumerate(top_jobs, 1)]
+    # v3.7: verifikasi jalur apply untuk lowongan terbaik SEBELUM pesan dirakit.
+    resolutions: Dict[Any, Dict[str, Any]] = {}
+    if RESOLVE_ENABLED and top_jobs:
+        n = min(len(top_jobs), RESOLVE_MAX_JOBS)
+        print(f"🔎 [v3.7] Memverifikasi jalur apply {n} lowongan terbaik...")
+        budget = {"probes": RESOLVE_MAX_PROBES, "jsearch": RESOLVE_MAX_JSEARCH}
+        for j in top_jobs[:n]:
+            try:
+                res = resolve_job(j, budget)
+                resolutions[j["id"]] = res
+                extra = " | ".join(
+                    str(x) for x in (res.get("careers"), res.get("email"), res.get("crosspost")) if x
+                )
+                print(f"   [{res.get('status')}] {str(j.get('job_title'))[:55]}" + (f" -> {extra[:90]}" if extra else ""))
+            except Exception as e:
+                print(f"   ⚠️ resolver error (job {j.get('id')}): {e}")
+
+    blocks = [build_job_block(i, j, resolutions.get(j["id"])) for i, j in enumerate(top_jobs, 1)]
     footer = "💡 <i>Tool ini hanya memberi rekomendasi. Review dan apply manual lewat link di atas.</i>"
     groups = pack_messages(blocks, "x" * 220, footer)
     print(f"✅ {len(top_jobs)} lowongan akan dikirim dalam {len(groups)} pesan.")

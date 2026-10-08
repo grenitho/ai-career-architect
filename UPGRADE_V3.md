@@ -202,3 +202,32 @@ notifikasi darinya berisiko jadi dead-end yang merebut slot Top-15.
 - Tips manual: lowongan WWR sering di-mirror lengkap (termasuk JD penuh & link asli)
   di theohub.global / jobleads — bisa dipakai untuk MEMBACA JD walau apply-nya
   lewat situs perusahaan langsung.
+
+---
+
+## Update v3.7 (9 Okt 2026) — Apply Route Resolver (fase D.5)
+
+Otomatisasi dari "penyelamatan manual" kasus STEUART NUTRITION (skor 90, link WWR
+bertembok akun berbayar, jalur alternatif ditemukan lewat situs perusahaan).
+
+Modul baru `resolver.py`, dipanggil `notifier.py` HANYA untuk top ±10 lowongan:
+1. **Klasifikasi link apply** — fast-path domain bertembok (WWR/FlexJobs/dkk.) +
+   probe HTTP (marker "create an account to view", 401/403/404).
+2. **Ekstraksi situs perusahaan** dari deskripsi (format WWR "URL: https://...").
+3. **Probe halaman karir** — /careers, /jobs, /apply, dll. + deteksi ATS
+   (Lever, Greenhouse, Ashby, BambooHR, Workable, ...) → link daftar lowongan resmi.
+4. **Email kontak** — mailto dari /contact perusahaan (jalur direct-apply).
+5. **Cross-post** — query JSearch `"judul" perusahaan` (maks 3 call/run) → link
+   lowongan yang sama di board lain.
+
+Hasilnya dirender di pesan Telegram:
+`⚠️ Link utama butuh akun/berbayar — jalur alternatif: 🏢 halaman karir | 📧 email | 🔁 cross-post`.
+
+Angka-angka pengaman (env): `RESOLVE_APPLY_LINKS` (on/off), `RESOLVE_MAX_JOBS=10`,
+`RESOLVE_MAX_PROBES=6`, `RESOLVE_MAX_JSEARCH=3`. Tanpa perubahan schema Supabase.
+Workflow: step Notifier kini menerima `RAPIDAPI_KEY` + `RESOLVE_APPLY_LINKS` (vars).
+
+Batasan jujur: halaman karir full-JavaScript tidak terbaca `requests` (dilaporkan apa
+adanya, tidak dikarang); situs yang memblokir bot → status `unknown`; kasus rumit
+multi-hop tetap paling baik lewat analisis manual. Kuota JSearch total ±180/500 per
+bulan (90 ingest + maks 90 resolver) — tetap aman.
