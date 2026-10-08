@@ -26,6 +26,7 @@ from filters import (
     cosine_similarity,
     is_recent_enough,
     is_scam_risk,
+    is_service_offer,
     is_title_excluded,
     job_keys,
     location_verdict,
@@ -526,6 +527,7 @@ FUNNEL_ORDER = [
     "region_terbatas",
     "bahasa_asing",
     "indikasi_scam",
+    "bukan_lowongan",
     "tidak_ada_bidang",
     "batas_embed_run",
     "gagal_embedding",
@@ -610,6 +612,11 @@ def process_jobs(
                 continue
             if is_scam_risk(text):
                 funnel["indikasi_scam"] += 1
+                continue
+            # v3.3: buang iklan jasa freelancer / pencari kerja (mis. posting
+            # [FOR HIRE] atau "workflow rescue $50" di forum n8n).
+            if is_service_offer(job["title"], text):
+                funnel["bukan_lowongan"] += 1
                 continue
 
             eligible = route_tracks(job["title"], text, tracks)

@@ -252,6 +252,43 @@ def requires_other_language(text: Any) -> Optional[str]:
 
 
 # ---------------------------------------------------------------------------
+# Detektor "bukan lowongan": iklan jasa freelancer & pencari kerja (v3.3)
+# Kasus nyata: RSS komunitas n8n bercampur posting [FOR HIRE] / "Same-day n8n
+# workflow rescue $50" / "Looking for Remote Work" — iklan jasa, BUKAN lowongan.
+# ---------------------------------------------------------------------------
+
+_SERVICE_TITLE_RE = re.compile(
+    r"\[\s*for\s+hire\s*\]?"
+    r"|\bfor\s+hire\b"
+    r"|\[\s*(?:offering|available|resume|job[ -]?seeker|services?)\s*\]"
+    r"|\blooking\s+for\s+(?:remote\s+)?work\b"
+    r"|\bavailable\s+for\b",
+    re.IGNORECASE,
+)
+_SERVICE_TEXT_RE = re.compile(
+    # "I am available ..." KECUALI konteks recruiter ("available for questions/chat")
+    r"\bi\s+am\s+available\b(?!\s+(?:for|to)\s+(?:any\s+)?(?:questions?|clarifications?|chat|calls?|discussions?|info|interviews?))"
+    r"|\bi'?m\s+available\s+(?:today|for\s+(?:hire|work|projects?|freelance))\b"
+    r"|\bi\s+(?:offer|provide)\s+(?:my\s+)?(?:services|support)\b"
+    r"|\bmy\s+services\b"
+    r"|\blooking\s+for\s+(?:work|clients|gigs|new\s+projects)\b"
+    r"|\byou\s+pay\s+(?:only\s+)?after\s+i\b"
+    r"|\bi\s+will\s+(?:fix|build|deliver|reproduce|troubleshoot|debug)\b"
+    r"|\bopen\s+to\s+(?:freelance|contract)\s+(?:work|projects|gigs)\b"
+    r"|\b(?:dm|message)\s+me\s+with\s+(?:the|your)\s+(?:failing|problem|bug|workflow)\b",
+    re.IGNORECASE,
+)
+
+
+def is_service_offer(title: str, text: str) -> bool:
+    """True bila posting lebih mirip iklan jasa freelancer / pencari kerja
+    daripada lowongan kerja dari pemberi kerja."""
+    if _SERVICE_TITLE_RE.search(title or ""):
+        return True
+    return bool(_SERVICE_TEXT_RE.search((text or "")[:2500]))
+
+
+# ---------------------------------------------------------------------------
 # Indikasi scam
 # ---------------------------------------------------------------------------
 

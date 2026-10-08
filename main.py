@@ -43,6 +43,7 @@ TUGAS ANALISIS:
 5. Tulis "cv_angle": 1 kalimat tentang cara memposisikan pengalaman kandidat (termasuk pengalaman usaha sendiri) agar relevan untuk JD ini.
 6. Nilai "region_eligibility" untuk kandidat di Indonesia (UTC+7): "worldwide", "apac_ok", "restricted" (hanya negara/region tertentu atau wajib jam kerja zona lain yang tidak masuk akal), atau "unclear".
 7. Tandai "suspicious": true jika JD mengindikasikan penipuan (minta bayar di muka, wawancara hanya via chat pribadi, gaji tidak masuk akal untuk tugasnya).
+8. Verifikasi postingan ini benar-benar LOWONGAN KERJA dari pemberi kerja. Jika ini iklan freelancer menawarkan jasa ("for hire", "I am available", "you pay after I fix..."), iklan pencari kerja, atau bukan lowongan sama sekali, set "is_job": false.
 
 FORMAT OUTPUT (WAJIB JSON VALID):
 {{
@@ -52,6 +53,7 @@ FORMAT OUTPUT (WAJIB JSON VALID):
   "interview_talking_points": ["Pertanyaan 1", "Pertanyaan 2"],
   "cv_angle": "Satu kalimat cara memposisikan pengalaman kandidat",
   "region_eligibility": "worldwide",
+  "is_job": true,
   "suspicious": false
 }}
 """
@@ -138,7 +140,11 @@ def run_daily_matching():
             score = max(0, min(100, int(result.get("score", 0))))
 
             # Pengaman deterministik: LLM kadang terlalu murah hati.
-            if (
+            # v3.3: postingan yang bukan lowongan kerja (iklan jasa/for-hire)
+            # dipatok maksimal 10 — tidak akan pernah lolos ambang notifikasi.
+            if result.get("is_job") is False:
+                score = min(score, 10)
+            elif (
                 _truthy(result.get("suspicious"))
                 or result.get("region_eligibility") == "restricted"
             ):

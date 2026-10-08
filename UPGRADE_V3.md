@@ -127,3 +127,25 @@ commit. `test_api.py` dihapus manual. `migration_v2.sql` dibuat sebagai file bar
   (timeout), paginasi Remotive (parameter diabaikan server), Himalayas limit>30 (tidak
   berpengaruh). RemoteJobs.org sendiri masih hidup dari IP rumahan — hanya IP GitHub
   Actions yang diblokir, jadi memang tidak berguna untuk pipeline ini.
+
+---
+
+## Update v3.3 (8 Okt 2026) — filter "bukan lowongan"
+
+Kasus nyata: notifikasi Telegram berisi "Same-day n8n workflow rescue - $50 fixed"
+dengan skor 85 — padahal itu **iklan freelancer menawarkan jasa**, bukan lowongan.
+Papan Jobs komunitas n8n memang campur aduk: dari 25 posting terbaru, mayoritas
+berprefiks [FOR HIRE]. Tag kategori RSS-nya tidak membantu (semuanya "Jobs").
+
+Tiga lapis pertahanan baru:
+1. **Regex judul** (`filters.is_service_offer`): [FOR HIRE], [OFFERING], "looking for
+   (remote) work", "available for ...", dsb.
+2. **Regex isi** (pola jual-jasa orang pertama): "I am available" (dengan pengecualian
+   konteks recruiter: "I am available for questions/chat"), "you pay only after I",
+   "I will fix/build/deliver", "my services", "hire me", "looking for clients/gigs",
+   "open to freelance work", "DM me with the failing...".
+3. **Juri AI** (main.py): tugas analisis #8 — verifikasi postingan benar-benar lowongan;
+   field baru `"is_job"` di JSON; `is_job: false` → skor dipatok maksimal 10.
+
+Counter funnel baru: `bukan_lowongan`. Berlaku untuk SEMUA sumber (bukan cuma n8n) —
+thread HN atau feed lain yang kebobolan posting pencari kerja ikut tersaring.
