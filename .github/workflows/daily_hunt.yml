@@ -1,0 +1,47 @@
+name: Daily Job Hunt
+
+on:
+  workflow_dispatch:
+
+jobs:
+  hunt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Run Ingest
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          GEMINI_EMBEDDING_API_KEY: ${{ secrets.GEMINI_EMBEDDING_API_KEY }}
+          GEMINI_REASONING_API_KEY: ${{ secrets.GEMINI_REASONING_API_KEY }}
+          GEMINI_EMBEDDING_MODEL: ${{ secrets.GEMINI_EMBEDDING_MODEL }}
+          GEMINI_REASONING_MODEL: ${{ secrets.GEMINI_REASONING_MODEL }}
+          RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
+        run: python ingest.py
+
+      - name: Run Matching
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          GEMINI_EMBEDDING_API_KEY: ${{ secrets.GEMINI_EMBEDDING_API_KEY }}
+          GEMINI_REASONING_API_KEY: ${{ secrets.GEMINI_REASONING_API_KEY }}
+          GEMINI_EMBEDDING_MODEL: ${{ secrets.GEMINI_EMBEDDING_MODEL }}
+          GEMINI_REASONING_MODEL: ${{ secrets.GEMINI_REASONING_MODEL }}
+        run: python main.py
+
+      - name: Run Notifier
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python notifier.py
