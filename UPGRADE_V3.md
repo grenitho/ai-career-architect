@@ -149,3 +149,19 @@ Tiga lapis pertahanan baru:
 
 Counter funnel baru: `bukan_lowongan`. Berlaku untuk SEMUA sumber (bukan cuma n8n) —
 thread HN atau feed lain yang kebobolan posting pencari kerja ikut tersaring.
+
+---
+
+## Update v3.4 (8 Okt 2026) — efisiensi sumber (berdasarkan log run produksi pertama)
+
+Run produksi 8 Okt: 1.402 mentah → 45 tersimpan → 7 notifikasi ✅. Tapi terlihat
+pemborosan besar: **Remotive menyumbang 578 "lowongan" yang sebenarnya cuma 17 job
+unik** — server Remotive kini mengabaikan parameter `search` (33 query berbeda
+semuanya dibalas 17 lowongan terbaru yang sama; ~560 duplikat dibuang dedup setiap run).
+
+- **Remotive per-query dihapus** — feed penuh tetap dipanggil sekali (hasilnya identik,
+  hemat 33 panggilan HTTP + ±17 detik per run).
+- **JSearch naik dari 2 → 3 query rotasi/hari** (env `JSEARCH_QUERIES_PER_RUN`, default 3):
+  setelah Remotive kehilangan kemampuan search, JSearch adalah satu-satunya pencarian
+  tertarget. Kuota tetap aman: ±90 call/bulan dari 500.
+- Sleep antar-query pencarian 0.5s → 0.3s (beban sumber berkurang).

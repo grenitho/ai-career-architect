@@ -46,6 +46,10 @@ MAX_JOBS_TO_EMBED = int(os.getenv("MAX_JOBS_TO_EMBED", "150"))
 MAX_JOB_AGE_DAYS = int(os.getenv("MAX_JOB_AGE_DAYS", "21"))
 # V3: 2 -> 3 query per bidang (11 bidang aktif = cakupan pencarian lebih luas).
 MAX_QUERIES_PER_TRACK = int(os.getenv("MAX_QUERIES_PER_TRACK", "3"))
+# V3.4: JSearch kini satu-satunya sumber pencarian tertarget (Remotive mengabaikan
+# parameter search sejak Okt 2026). 3 query rotasi/hari ≈ 90 call/bulan dari kuota
+# 500 free tier — tetap sangat aman.
+JSEARCH_QUERIES_PER_RUN = int(os.getenv("JSEARCH_QUERIES_PER_RUN", "3"))
 MIN_DESC_CHARS = int(os.getenv("MIN_DESC_CHARS", "150"))
 SEEN_RETENTION_DAYS = int(os.getenv("SEEN_RETENTION_DAYS", "45"))
 DISABLED_SOURCES = {
@@ -452,24 +456,25 @@ def fetch_all(tracks: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
             jobs.extend(fn())
 
     # Sumber yang menerima pencarian: satu panggilan per query.
-    # (v3.2: RemoteJobs.org dihapus dari loop ini.)
+    # (v3.2: RemoteJobs.org dihapus — 429 permanen dari IP GitHub Actions.)
+    # (v3.4: Remotive per-query dihapus — server mengabaikan parameter search:
+    #  33 query berbeda semuanya mengembalikan 17 lowongan terbaru yang SAMA,
+    #  menghasilkan ~560 duplikat/run. Feed penuh Remotive tetap dipakai sekali.)
     for q in queries:
-        if _on("remotive"):
-            jobs.extend(fetch_remotive(q))
         if _on("jobicy"):
             jobs.extend(fetch_jobicy(q))
-        time.sleep(0.5)  # sopan ke API gratis
+        time.sleep(0.3)  # sopan ke API gratis
 
-    # JSearch (RapidAPI) v3: 2 query ROTASI harian dengan suffix "remote"
-    # (syarat mutlak user: 100% remote), bukan lagi hanya fallback saat sumber
-    # lain kosong. Kuota: ~2 call/hari ≈ 60/bulan dari 500 free tier.
+    # JSearch (RapidAPI) v3.4: JSEARCH_QUERIES_PER_RUN (default 3) query ROTASI
+    # harian dengan suffix "remote" (syarat mutlak user: 100% remote). Ini kini
+    # satu-satunya pencarian tertarget. Kuota: ~3 call/hari ≈ 90/bulan dari 500.
     if queries and _on("jsearch") and RAPIDAPI_KEY:
         from datetime import date as _date
 
         n = _date.today().toordinal()
         picks: List[str] = []
         i = n
-        while len(picks) < min(2, len(queries)):
+        while len(picks) < min(JSEARCH_QUERIES_PER_RUN, len(queries)):
             q = queries[i % len(queries)]
             if q not in picks:
                 picks.append(q)
