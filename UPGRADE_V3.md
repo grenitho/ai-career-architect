@@ -165,3 +165,16 @@ semuanya dibalas 17 lowongan terbaru yang sama; ~560 duplikat dibuang dedup seti
   setelah Remotive kehilangan kemampuan search, JSearch adalah satu-satunya pencarian
   tertarget. Kuota tetap aman: ±90 call/bulan dari 500.
 - Sleep antar-query pencarian 0.5s → 0.3s (beban sumber berkurang).
+
+---
+
+## Update v3.5 (8 Okt 2026) — alert kegagalan run
+
+Tool ini jalan tanpa pengawasan (cron harian). Kalau sebuah run GAGAL (error kode,
+Supabase down, secrets keliru, dsb.), sebelumnya tidak ada yang tahu — Telegram hanya
+sunyi, tidak bisa dibedakan dari "hari ini tidak ada match".
+
+- Step baru di `daily_hunt.yml`: **"Alert on failure"** (`if: failure()`) — mengirim
+  pesan 🚨 ke Telegram berisi link langsung ke log run yang gagal.
+- Memakai secrets Telegram yang sudah ada; tidak ada secret/env baru.
+- Kalau step alert-nya sendiri gagal, tidak memicu error berantai (`|| true`).

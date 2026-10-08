@@ -45,3 +45,18 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python notifier.py
+
+      # v3.5: kalau run GAGAL (error kode, Supabase down, kuota habis, dsb.),
+      # kirim alert ke Telegram — tool tanpa pengawasan harus bisa "teriak".
+      - name: Alert on failure
+        if: failure()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          if [ -n "$TELEGRAM_BOT_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ]; then
+            curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+              -H "Content-Type: application/json" \
+              --data "{\"chat_id\":\"${TELEGRAM_CHAT_ID}\",\"text\":\"🚨 AI Career Architect: run GAGAL. Cek log: https://github.com/grenitho/ai-career-architect/actions/runs/${{ github.run_id }}\",\"disable_web_page_preview\":true}" \
+              > /dev/null || true
+          fi
