@@ -109,7 +109,7 @@ TRACKS = {
             "analyst, bookkeeper, accounts payable/receivable or finance operations "
             "roles, including contract work."
         ),
-        "queries": ["Finance Manager", "Bookkeeper", "Financial Analyst"],
+        "queries": ["Finance Manager", "Financial Analyst", "Finance Operations"],
         "title_terms": [
             "finance manager", "financial analyst", "finance analyst", "bookkeeper",
             "accounting", "accountant", "accounts payable", "accounts receivable",
@@ -332,6 +332,10 @@ EXCLUDE_TITLE_TERMS = [
     "senior", "sr", "principal", "director", "head of", "vp", "vice president",
     "chief", "team lead", "tech lead", "engineering manager", "staff engineer",
     "staff software",
+    # v3.8: level junior/entry = buang leverage profil 20+ tahun & gaji di bawah
+    # lantai (kasus nyata: "Junior Accountant" US$40K dinilai 65 oleh tool).
+    "junior", "jr", "entry level", "entry-level", "intern", "internship",
+    "trainee", "graduate", "apprentice",
 ]
 
 # Dikirim ke Gemini pada tahap analisis (main.py) supaya penilaian tidak bias ke
@@ -354,3 +358,32 @@ CANDIDATE_NOTES = (
     "fungsional untuk kerja async (menulis); nilai lowongan yang mengandalkan "
     "presentasi lisan intensif sedikit lebih rendah."
 )
+
+# ---------------------------------------------------------------------------
+# v3.8: KNOCKOUT TERIKAT PROFIL — dievaluasi SEBELUM embedding & skoring
+# (menghemat kuota dan slot notifikasi). Fakta-fakta ini tidak bisa diklaim
+# atau dipelajari cepat secara jujur, jadi lowongan yang mewajibkannya adalah
+# dead-end sejak lahir. Edit bebas bila kondisi kandidat berubah
+# (mis. setelah mengambil sertifikasi QuickBooks).
+# Format: (nama_knockout, regex_istilah, regex_konteks_wajib) — keduanya harus
+# muncul dalam SATU kalimat, kecuali kalimat mengandung pelembut ("a plus",
+# "preferred", ...) yang membuat istilah tidak lagi wajib.
+# ---------------------------------------------------------------------------
+CANDIDATE_KNOCKOUTS = (
+    (
+        "software akuntansi wajib (QuickBooks/Xero/MYOB) - kandidat tidak punya",
+        r"\b(?:quick\s?books|xero|myob)\b",
+        r"\b(?:required|require|must|solid|strong|proficient|power\s+user|expert|"
+        r"extensive|daily|hands[- ]on|experienced?\s+(?:with|in|using)|working\s+"
+        r"knowledge\s+of|comfortable\s+with)\b",
+    ),
+    (
+        "inti kepatuhan pajak/AS (yurisdiksi yang tidak pernah kandidat kerjakan)",
+        r"\b(?:payroll\s+tax|sales\s+tax|use\s+tax|401k|w-2|1099|irs\s+filings?|"
+        r"tax\s+preparation|tax\s+filings?|franchise\s+tax|audit\s+requirements?)\b",
+        r"\b(?:reconcil\w*|prepar\w*|process\w*|manag\w*|handl\w*|fil\w*|submit\w*|report\w*)\b",
+    ),
+)
+# Tanpa konteks kata kerja pun, >= N istilah kepatuhan AS berbeda di satu lowongan
+# sudah cukup untuk knockout (pola daftar tugas panjang, kasus Oasis Wellness).
+COMPLIANCE_TERMS_MIN_GLOBAL = 3

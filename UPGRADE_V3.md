@@ -231,3 +231,39 @@ Batasan jujur: halaman karir full-JavaScript tidak terbaca `requests` (dilaporka
 adanya, tidak dikarang); situs yang memblokir bot → status `unknown`; kasus rumit
 multi-hop tetap paling baik lewat analisis manual. Kuota JSearch total ±180/500 per
 bulan (90 ingest + maks 90 resolver) — tetap aman.
+
+---
+
+## Update v3.8 (9 Okt 2026) — lapis knockout terikat profil + kejujuran region & kompensasi
+
+Lahir dari `EVALUASI_TOOL_3_LEAD_BOOKKEEPER.md` (chat asisten lamaran): 3 lead
+bookkeeper berskor 65-85 dengan tag 🌍 ternyata NO-GO semua saat JD asli dibaca —
+QuickBooks/Xero wajib, inti kepatuhan pajak AS, part-time 10 jam/minggu (≈US$800-
+1.400/bln < lantai), level junior US$40K untuk profil 20+ tahun, posting 6 bulan basi.
+
+Perbaikan deterministik (sebelum embedding & skoring, menghemat kuota):
+1. **`CANDIDATE_KNOCKOUTS` di tracks.py** (config, editable): istilah wajib
+   QuickBooks/Xero/MYOB per-kalimat dengan konteks "required/must/solid/power user/..."
+   (pelembut "a plus/preferred" membatalkan), serta klaster kepatuhan AS
+   (payroll tax, sales tax, 401k, W-2, 1099, tax preparation, ...) — knockout bila
+   ada konteks kata kerja ATAU ≥3 istilah berbeda dalam satu lowongan.
+   Funnel counter baru: `knockout_profil`.
+2. **Kalkulasi penghasilan** (`filters.estimate_monthly_usd`): parse rate jam/tahun +
+   jam/minggu dari JD → estimasi take-home bulanan; HI di bawah `MIN_MONTHLY_USD`
+   (default 2000) = dibuang (`kompensasi_dibawah_lantai`). Bonus/equity/sign-on diabaikan.
+3. **Judul junior/entry/intern/trainee/graduate ditambahkan ke EXCLUDE_TITLE_TERMS**
+   (overqualification + gaji di bawah lantai adalah paket yang sama).
+4. **Region jujur (main.py):** klaim LLM `worldwide` wajib bersaksi di TEKS JD
+   (worldwide/anywhere/global/apac/...); bila tidak → `unclear` → notifier menampilkan
+   ❔ "Region belum jelas", bukan 🌍. JD = sumber kebenaran, bukan metadata agregator.
+5. **Transparansi di Telegram (notifier):** baris 💰 estimasi US$/bln + jam/minggu
+   dari JD, dan ⚠️ part-time tipis (<20 jam/minggu).
+6. **Query beracun dibuang:** `Bookkeeper` keluar dari query track finance_ops
+   (vertical bookkeeper AS tertutup struktural untuk profil ini: 3/3 lead mewajibkan
+   QB/Xero) — diganti `Finance Operations`.
+
+Yang DITUNDA ke v3.9 (butuh perubahan schema/prompt): skor skill vs deal terpisah
+di prompt LLM + daftar knockout terpicu; dokumen JD penuh harian via Telegram
+(batas 4096 karakter membuat teks JD tidak muat di pesan); kolom `posted_at` di
+daily_jobs supaya lowongan mirror tanpa tanggal bisa dilabeli "stale" (kini umur
+>21 hari sudah dibuang HANYA bila tanggal diketahui).

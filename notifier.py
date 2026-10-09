@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 
 from db import supabase, mark_jobs_notified
 from tracks import TRACKS
+from filters import estimate_monthly_usd
 from resolver import (
     RESOLVE_ENABLED,
     RESOLVE_MAX_JOBS,
@@ -99,6 +100,17 @@ def build_job_block(index: int, job: Dict[str, Any], resolution: Optional[Dict[s
         + (f" | 📡 {esc(job.get('source') or '')}" if job.get("source") else "")
     )
     lines.append(f"   📊 <b>Skor:</b> {score}/100" + (f" | {region}" if region else ""))
+    # v3.8: transparansi kompensasi & jam kerja, dihitung ulang dari teks JD tersimpan.
+    lo, hi, hrs, ev = estimate_monthly_usd(job.get("description") or "")
+    if hi is not None:
+        lines.append(
+            f"   💰 Estimasi JD: US${lo:,}–{hi:,}/bln ({ev})"
+            + (f" • ~{hrs:.0f} jam/minggu" if hrs else "")
+        )
+    if hrs is not None and hrs < 20:
+        lines.append(
+            "   ⚠️ Part-time tipis (&lt;20 jam/minggu) — total penghasilan perlu dicek manual"
+        )
     lines.append("   💡 <b>Mengapa Cocok:</b>")
     for r in reasons[:2]:
         lines.append(f"   • {clip(r)}")

@@ -20,6 +20,8 @@ from datetime import datetime, timezone
 from functools import lru_cache
 from typing import Any, Dict, List, Optional, Tuple
 
+from tracks import CANDIDATE_KNOCKOUTS, COMPLIANCE_TERMS_MIN_GLOBAL
+
 # ---------------------------------------------------------------------------
 # URL & kunci dedup
 # ---------------------------------------------------------------------------
@@ -164,6 +166,9 @@ _OPEN_LOCATION_TOKENS = (
     "worldwide", "anywhere", "global", "any location", "international",
     "everywhere", "apac", "asia", "indonesia", "no restriction", "all countries",
 )
+# Alias publik (v3.8): dipakai main.py untuk memverifikasi klaim region LLM
+# terhadap TEKS JD — JD adalah sumber kebenaran, bukan metadata agregator.
+OPEN_LOCATION_TOKENS = _OPEN_LOCATION_TOKENS
 _REMOTE_NOISE_RE = re.compile(
     r"\b(?:fully\s+remote|100%\s*remote|remote|work\s+from\s+home|wfh)\b", re.IGNORECASE
 )
@@ -364,3 +369,88 @@ def cosine_similarity(a: List[float], b: List[float]) -> float:
     if ma == 0 or mb == 0:
         return 0.0
     return dot / (ma * mb)
+
+
+# ---------------------------------------------------------------------------
+# v3.8: Knockout terikat profil + kalkulasi penghasilan
+# Lahir dari evaluasi 3 lead bookkeeper (9 Okt 2026): skor 65-85 diberikan ke
+# lowongan yang MUSTAHIL dilamar (QB/Xero wajib, kepatuhan AS, part-time tipis).
+# ---------------------------------------------------------------------------
+
+_COMPLIANCE_TERMS_RE = re.compile(
+    r"payroll\s+tax|sales\s+tax|use\s+tax|401k|w-2|1099|irs\s+filings?|"
+    r"tax\s+preparation|tax\s+filings?|franchise\s+tax|audit\s+requirements?"
+)
+
+
+def evaluate_knockouts(title: str, text: str) -> List[str]:
+    """Daftar nama knockout profil yang terpicu oleh lowongan ini (list kosong = aman)."""
+    hits: List[str] = []
+    body = text or ""
+    sentences = re.split(r"(?<=[.;:!?])\s+|\n+", body)
+    for name, term_re, ctx_re in CANDIDATE_KNOCKOUTS:
+        t_re = re.compile(term_re, re.IGNORECASE)
+        c_re = re.compile(ctx_re, re.IGNORECASE)
+        for s in sentences:
+            if t_re.search(s) and c_re.search(s) and not _SOFTENER_RE.search(s):
+                hits.append(name)
+                break
+    # Aturan kepadatan: daftar tugas panjang penuh istilah kepatuhan AS
+    # (kasus Oasis Wellness: sales tax + payroll tax + 401k dalam satu tarikan napas).
+    distinct = set(_COMPLIANCE_TERMS_RE.findall(body.lower()))
+    if len(distinct) >= COMPLIANCE_TERMS_MIN_GLOBAL:
+        label = CANDIDATE_KNOCKOUTS[1][0]
+        if label not in hits:
+            hits.append(label)
+    return hits
+
+
+_HOURS_RE = re.compile(
+    r"(\d{1,2})\s*(?:[–-]\s*(\d{1,2})\s*)?(?:hours|hrs)\s*(?:per|/|a)\s*week", re.IGNORECASE
+)
+_HOURLY_RE = re.compile(
+    r"\$\s?(\d{2,3})(?:\s*[–-]\s*\$?\s?(\d{2,3}))?\s*(?:/|per)\s*(?:hour|hr)\b", re.IGNORECASE
+)
+_ANNUAL_FULL_RE = re.compile(
+    r"\$\s?(\d{2,3}(?:,\d{3})+)(?:\s*[–-]\s*\$?\s?(\d{2,3}(?:,\d{3})+))?\s*(?:/|per)\s*year",
+    re.IGNORECASE,
+)
+_ANNUAL_K_RE = re.compile(
+    r"(?:usd|us\$|\$)\s?(\d{2,3})\s*[kK]\b"
+    r"(?:\s*[–-]\s*(?:usd|us\$|\$)?\s?(\d{2,3})\s*[kK]\b)?",
+    re.IGNORECASE,
+)
+_COMP_BONUS_RE = re.compile(r"\b(?:bonus|sign[- ]on|equity|stipend|referral|relocation)\b", re.IGNORECASE)
+
+
+def estimate_monthly_usd(text: str) -> Tuple[Optional[int], Optional[int], Optional[float], str]:
+    """Estimasi penghasilan bulanan (lo, hi, jam/minggu, bukti) dari teks JD.
+    Konservatif: hanya menghitung bila ada angka gaji yang jelas; angka bonus/
+    equity diabaikan. Return (None, None, hours, '') bila tak ada gaji tercantum."""
+    t = text or ""
+    hours: Optional[float] = None
+    m = _HOURS_RE.search(t)
+    if m:
+        a = int(m.group(1))
+        b = int(m.group(2)) if m.group(2) else a
+        hours = (a + b) / 2
+
+    mh = _HOURLY_RE.search(t)
+    if mh and not _COMP_BONUS_RE.search(t[mh.end(): mh.end() + 18]):
+        h_lo, h_hi = int(mh.group(1)), int(mh.group(2) or mh.group(1))
+        hrs = hours or 40.0
+        return round(h_lo * hrs * 4.33), round(h_hi * hrs * 4.33), hours, f"${h_lo}-{h_hi}/jam"
+
+    ma = _ANNUAL_FULL_RE.search(t)
+    if ma and not _COMP_BONUS_RE.search(t[ma.end(): ma.end() + 18]):
+        a_lo = int(ma.group(1).replace(",", ""))
+        a_hi = int((ma.group(2) or ma.group(1)).replace(",", ""))
+        return round(a_lo / 12), round(a_hi / 12), hours, f"${a_lo:,}-${a_hi:,}/tahun"
+
+    mk = _ANNUAL_K_RE.search(t)
+    if mk and not _COMP_BONUS_RE.search(t[mk.end(): mk.end() + 18]):
+        k_lo = int(mk.group(1)) * 1000
+        k_hi = int(mk.group(2) or mk.group(1)) * 1000
+        return round(k_lo / 12), round(k_hi / 12), hours, f"${k_lo // 1000}K-${k_hi // 1000}K/tahun"
+
+    return None, None, hours, ""

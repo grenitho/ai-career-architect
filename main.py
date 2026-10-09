@@ -10,6 +10,7 @@ from db import (
 )
 from ai_engine import get_gemini_reasoning, RateBudgetExceeded
 from tracks import TRACKS, CANDIDATE_NOTES
+from filters import OPEN_LOCATION_TOKENS
 
 load_dotenv()
 
@@ -138,6 +139,15 @@ def run_daily_matching():
                 prompt,
             )
             score = max(0, min(100, int(result.get("score", 0))))
+
+            # v3.8: TEKS JD adalah sumber kebenaran untuk region (evaluasi 3 lead
+            # bookkeeper: tag 🌍 tiga kali tidak terbukti di JD). Klaim "worldwide"
+            # dari LLM wajib punya saksi kata worldwide/anywhere/global/... di JD;
+            # jika tidak, turunkan ke "unclear" (notifier menampilkan ❔).
+            if result.get("region_eligibility") == "worldwide":
+                desc_l = (job["description"] or "").lower()
+                if not any(tok in desc_l for tok in OPEN_LOCATION_TOKENS):
+                    result["region_eligibility"] = "unclear"
 
             # Pengaman deterministik: LLM kadang terlalu murah hati.
             # v3.3: postingan yang bukan lowongan kerja (iklan jasa/for-hire)

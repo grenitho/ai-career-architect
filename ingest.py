@@ -24,6 +24,8 @@ from dotenv import load_dotenv
 from filters import (
     clean_html,
     cosine_similarity,
+    estimate_monthly_usd,
+    evaluate_knockouts,
     is_recent_enough,
     is_scam_risk,
     is_service_offer,
@@ -60,6 +62,10 @@ DISABLED_SOURCES = {
 # dari WWR berisiko jadi dead-end yang tidak bisa dilamar. Aktifkan lagi dengan
 # ENABLE_WWR=1 (env / repo variable) bila kamu punya akun WWR.
 ENABLE_WWR = os.getenv("ENABLE_WWR", "").strip().lower() in ("1", "true", "yes")
+# v3.8: lantai penghasilan bulanan (take-home) kandidat dalam USD — lowongan dengan
+# estimasi HI di bawah angka ini dibuang sebelum embedding (kasus nyata: part-time
+# 10 jam/minggu ≈ US$800-1.400 lolos dengan skor 85).
+MIN_MONTHLY_USD = int(os.getenv("MIN_MONTHLY_USD", "2000"))
 
 UA = {"User-Agent": "Mozilla/5.0 (compatible; JobHuntBot/2.0; personal use)"}
 
@@ -542,6 +548,8 @@ FUNNEL_ORDER = [
     "bahasa_asing",
     "indikasi_scam",
     "bukan_lowongan",
+    "knockout_profil",
+    "kompensasi_dibawah_lantai",
     "tidak_ada_bidang",
     "batas_embed_run",
     "gagal_embedding",
@@ -631,6 +639,16 @@ def process_jobs(
             # [FOR HIRE] atau "workflow rescue $50" di forum n8n).
             if is_service_offer(job["title"], text):
                 funnel["bukan_lowongan"] += 1
+                continue
+            # v3.8: knockout terikat profil (QB/Xero wajib, inti kepatuhan AS) —
+            # fakta yang tidak bisa diklaim/dipelajari cepat secara jujur.
+            if evaluate_knockouts(job["title"], text):
+                funnel["knockout_profil"] += 1
+                continue
+            # v3.8: kalkulasi penghasilan vs lantai kandidat (US$2.000/bln).
+            _lo, _hi, _hrs, _ev = estimate_monthly_usd(text)
+            if _hi is not None and _hi < MIN_MONTHLY_USD:
+                funnel["kompensasi_dibawah_lantai"] += 1
                 continue
 
             eligible = route_tracks(job["title"], text, tracks)
