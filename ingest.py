@@ -32,6 +32,7 @@ from filters import (
     is_title_excluded,
     job_keys,
     location_verdict,
+    parse_posted_at,
     requires_other_language,
     route_tracks,
 )
@@ -51,7 +52,7 @@ MAX_QUERIES_PER_TRACK = int(os.getenv("MAX_QUERIES_PER_TRACK", "3"))
 # V3.4: JSearch kini satu-satunya sumber pencarian tertarget (Remotive mengabaikan
 # parameter search sejak Okt 2026). 3 query rotasi/hari ≈ 90 call/bulan dari kuota
 # 500 free tier — tetap sangat aman.
-JSEARCH_QUERIES_PER_RUN = int(os.getenv("JSEARCH_QUERIES_PER_RUN", "3"))
+JSEARCH_QUERIES_PER_RUN = int(os.getenv("JSEARCH_QUERIES_PER_RUN", "4"))  # v3.9: 4 slot terjamin
 MIN_DESC_CHARS = int(os.getenv("MIN_DESC_CHARS", "150"))
 SEEN_RETENTION_DAYS = int(os.getenv("SEEN_RETENTION_DAYS", "45"))
 DISABLED_SOURCES = {
@@ -441,6 +442,30 @@ def fetch_hn_whoshiring() -> List[Dict[str, Any]]:
     return jobs
 
 
+def jsearch_slot_picks(n: int) -> List[str]:
+    """v3.9: rotasi BERSLOT — setiap hari dijamin ada pasokan technical, management,
+    dan long-tail. Rotasi berurutan v3.4 bikin bias vertikal (bisa 3/3 finance sehari).
+    Slot: [tech hari-n, tech hari-n+1, management berputar, long-tail berputar]."""
+    tech = list(TRACKS.get("ai_automation", {}).get("queries", []))
+    mgmt: List[str] = []
+    tail: List[str] = []
+    mgmt_tracks = ("ops_pm", "finance_ops", "crm_ops", "cs_success")
+    for name, t in TRACKS.items():
+        if not t.get("enabled", True) or name == "ai_automation":
+            continue
+        (mgmt if name in mgmt_tracks else tail).extend(t.get("queries", []))
+    picks: List[str] = []
+    if tech:
+        picks.append(tech[n % len(tech)])
+        picks.append(tech[(n + 1) % len(tech)])
+    if mgmt:
+        picks.append(mgmt[n % len(mgmt)])
+    if tail:
+        picks.append(tail[n % len(tail)])
+    uniq = [p for i, p in enumerate(picks) if p not in picks[:i]]
+    return uniq[:JSEARCH_QUERIES_PER_RUN]
+
+
 def _on(source: str) -> bool:
     return source.lower() not in DISABLED_SOURCES
 
@@ -480,20 +505,13 @@ def fetch_all(tracks: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
             jobs.extend(fetch_jobicy(q))
         time.sleep(0.3)  # sopan ke API gratis
 
-    # JSearch (RapidAPI) v3.4: JSEARCH_QUERIES_PER_RUN (default 3) query ROTASI
-    # harian dengan suffix "remote" (syarat mutlak user: 100% remote). Ini kini
-    # satu-satunya pencarian tertarget. Kuota: ~3 call/hari ≈ 90/bulan dari 500.
-    if queries and _on("jsearch") and RAPIDAPI_KEY:
-        from datetime import date as _date
+    # JSearch (RapidAPI) v3.9: slot harian terjamin (technical + management +
+    # long-tail setiap hari). Kuota ±120 call/bulan dari 500 free tier.
+    from datetime import date as _date
 
-        n = _date.today().toordinal()
-        picks: List[str] = []
-        i = n
-        while len(picks) < min(JSEARCH_QUERIES_PER_RUN, len(queries)):
-            q = queries[i % len(queries)]
-            if q not in picks:
-                picks.append(q)
-            i += 1
+    picks = jsearch_slot_picks(_date.today().toordinal())
+    print(f"      -> JSearch slot v3.9: {picks}")
+    if _on("jsearch") and RAPIDAPI_KEY:
         for q in picks:
             jobs.extend(fetch_jsearch(f"{q} remote"))
 
@@ -705,6 +723,7 @@ def process_jobs(
                         source=job["source"],
                         similarity=sims[best],
                         location_note=loc_note,
+                        posted_at=parse_posted_at(job["posted_at"]),
                     )
                     funnel["TERSIMPAN"] += 1
                     saved_by_track[best] += 1

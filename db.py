@@ -104,6 +104,7 @@ def save_daily_job(
     source: Optional[str] = None,
     similarity: Optional[float] = None,
     location_note: Optional[str] = None,
+    posted_at: Optional[Any] = None,
 ) -> Dict[str, Any]:
     # processed_date ditetapkan di Python supaya tidak bergantung zona waktu server DB
     payload = {
@@ -120,9 +121,20 @@ def save_daily_job(
         "source": source,
         "similarity": round(similarity, 4) if similarity is not None else None,
         "location_note": location_note or None,
+        "posted_at": posted_at.isoformat() if posted_at else None,
     }
-    response = supabase.table("daily_jobs").insert(payload).execute()
-    return response.data[0]
+    try:
+        response = supabase.table("daily_jobs").insert(payload).execute()
+        return response.data[0]
+    except Exception as e:
+        # v3.9 toleran: bila kolom posted_at belum ada (migration_v3.sql belum
+        # dijalankan), coba ulang tanpa kolom itu supaya ingest tidak berhenti.
+        if "posted_at" in str(e):
+            print("   ⚠️ kolom posted_at belum ada (jalankan migration_v3.sql); coba tanpa kolom.")
+            payload.pop("posted_at", None)
+            response = supabase.table("daily_jobs").insert(payload).execute()
+            return response.data[0]
+        raise
 
 
 def get_unanalyzed_jobs(limit: int) -> List[Dict[str, Any]]:

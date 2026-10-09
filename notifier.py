@@ -99,7 +99,31 @@ def build_job_block(index: int, job: Dict[str, Any], resolution: Optional[Dict[s
         + (f" | {esc(track_tag)}" if track_tag else "")
         + (f" | 📡 {esc(job.get('source') or '')}" if job.get("source") else "")
     )
-    lines.append(f"   📊 <b>Skor:</b> {score}/100" + (f" | {region}" if region else ""))
+    sf = reasoning.get("skill_fit")
+    df = reasoning.get("deal_fit")
+    lines.append(
+        f"   📊 <b>Skor:</b> {score}/100"
+        + (f" (skill {sf} • deal {df})" if sf is not None and df is not None else "")
+        + (f" | {region}" if region else "")
+    )
+    kos = reasoning.get("knockouts") or []
+    if isinstance(kos, str):
+        kos = [kos]
+    for k in kos[:2]:
+        lines.append(f"   ⛔ Knockout: {clip(k, 120)}")
+    # v3.9: kesegaran posting (kolom posted_at via migration_v3.sql).
+    pa = job.get("posted_at")
+    if not pa:
+        lines.append(
+            "   ❔ Tanggal posting tak diketahui (mirror agregator) — cek masih buka atau tidak"
+        )
+    else:
+        try:
+            age = (date.today() - date.fromisoformat(str(pa)[:10])).days
+            if age >= 14:
+                lines.append(f"   ⚠️ Posting berumur {age} hari — verifikasi masih terbuka")
+        except Exception:
+            pass
     # v3.8: transparansi kompensasi & jam kerja, dihitung ulang dari teks JD tersimpan.
     lo, hi, hrs, ev = estimate_monthly_usd(job.get("description") or "")
     if hi is not None:
@@ -162,6 +186,64 @@ def pack_messages(blocks: List[str], header: str, footer: str) -> List[List[int]
     return groups
 
 
+def send_telegram_document(filename: str, content: str, caption: str = "") -> bool:
+    """v3.9: kirim JD LENGKAP sebagai dokumen .md supaya agen hilir (chat lamaran)
+    tidak perlu scraping ulang halaman ber-403/berbayar."""
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        return False
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument"
+    try:
+        r = requests.post(
+            url,
+            data={"chat_id": TELEGRAM_CHAT_ID, "caption": caption[:1000]},
+            files={"document": (filename, content.encode("utf-8"), "text/markdown")},
+            timeout=60,
+        )
+        r.raise_for_status()
+        print("✅ Dokumen JD terkirim ke Telegram!")
+        return True
+    except Exception as e:
+        print(f"   ⚠️ Gagal kirim dokumen JD: {e}")
+        return False
+
+
+def build_jd_document(
+    jobs: List[Dict[str, Any]], resolutions: Dict[Any, Dict[str, Any]]
+) -> str:
+    """v3.9: satu dokumen markdown berisi JD penuh + semua jalur apply untuk
+    seluruh lowongan yang dikirim pada run ini."""
+    parts = [f"# AI Career Architect — JD Lengkap & Jalur Apply ({date.today().isoformat()})\n"]
+    for i, j in enumerate(jobs, 1):
+        r = j.get("ai_reasoning") or {}
+        if isinstance(r, str):
+            try:
+                r = json.loads(r)
+            except Exception:
+                r = {}
+        res = (resolutions or {}).get(j["id"]) or {}
+        parts.append(f"\n## {i}. {j.get('job_title')} — {j.get('company')}")
+        parts.append(
+            f"Skor {j.get('match_score')}/100 (skill {r.get('skill_fit', '?')} • "
+            f"deal {r.get('deal_fit', '?')}) | track: {j.get('track')} | "
+            f"sumber: {j.get('source')} | region: {r.get('region_eligibility', '?')}"
+        )
+        parts.append(f"Apply utama: {j.get('apply_url')}")
+        if res.get("careers"):
+            parts.append(f"Karir perusahaan: {res.get('careers')}")
+        if res.get("email"):
+            parts.append(f"Kontak langsung: {res.get('email')}")
+        if res.get("crosspost"):
+            parts.append(f"Cross-post: {res.get('crosspost')}")
+        kos = r.get("knockouts") or []
+        if kos:
+            parts.append("Knockouts: " + "; ".join(str(k) for k in kos))
+        if r.get("cv_angle"):
+            parts.append(f"Angle CV: {r.get('cv_angle')}")
+        parts.append("\n### JD penuh\n" + str(j.get("description") or "")[:6000])
+        parts.append("\n---")
+    return "\n".join(parts)
+
+
 def _send_empty_status(today: str):
     """V3: tetap kirim status singkat walau hasil kosong, supaya sunyi tidak misterius.
     Lowongan 'nyaris lolos' ditandai notified agar pesan sama tidak berulang tiap hari."""
@@ -205,7 +287,7 @@ def format_and_notify():
     # di-ingest kemarin tetap terkirim.
     response = (
         supabase.table("daily_jobs")
-        .select("id, job_title, company, match_score, ai_reasoning, apply_url, track, source")
+        .select("id, job_title, company, match_score, ai_reasoning, apply_url, track, source, description, posted_at")
         .eq("analyzed", True)
         .eq("notified", False)
         .gte("match_score", MIN_NOTIFY_SCORE)
@@ -241,6 +323,7 @@ def format_and_notify():
     groups = pack_messages(blocks, "x" * 220, footer)
     print(f"✅ {len(top_jobs)} lowongan akan dikirim dalam {len(groups)} pesan.")
 
+    any_sent = False
     for n, idx in enumerate(groups, 1):
         header = (
             f"🎯 <b>AI Career Architect - Daily Match ({n}/{len(groups)})</b>\n"
@@ -249,12 +332,25 @@ def format_and_notify():
         message = header + "".join(blocks[i] for i in idx) + footer
         if send_telegram_message(message):
             mark_jobs_notified([top_jobs[i]["id"] for i in idx])
+            any_sent = True
         else:
             print(
                 "   ⚠️ Pesan gagal, TIDAK ditandai notified -> dicoba lagi di run berikutnya."
             )
         if n < len(groups):
             time.sleep(1.5)
+
+    # v3.9: kirim JD LENGKAP sebagai dokumen supaya chat lamaran tidak perlu
+    # scraping ulang halaman bertembok/403.
+    if any_sent:
+        try:
+            doc = build_jd_document(top_jobs, resolutions)
+            send_telegram_document(
+                f"jobs_{today}.md", doc,
+                caption="JD lengkap + jalur apply untuk lowongan di atas",
+            )
+        except Exception as e:
+            print(f"   ⚠️ Dokumen JD gagal: {e}")
 
     print("🎉 Fase D selesai.")
 

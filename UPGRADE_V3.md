@@ -234,6 +234,39 @@ bulan (90 ingest + maks 90 resolver) — tetap aman.
 
 ---
 
+## Update v3.9 (9 Okt 2026) — "bentuk sempurna": rotasi berkeadilan, skor kembar, JD penuh di Telegram
+
+### 1. Rotasi JSearch berslot (memperbaiki bias vertikal)
+Keluhan nyata: "hari ini Telegram isinya hampir semua finance". Penyebab: rotasi
+berurutan v3.4 bisa menjatuhkan 3/3 query harian ke satu track (9 Okt: 2/3 finance;
+10 Okt: 3/3 finance), sementara technical hanya datang sebagai "banjir" bulanan/mingguan
+(HN, WWR) yang langsung habis dimakan memori dedup. v3.9 mengganti rotasi dengan
+**4 slot terjamin harian**: 2 query ai_automation (offset berbeda) + 1 query keluarga
+management (ops/finance/crm/cs berputar) + 1 query long-tail berputar. Kuota ±120
+call/bulan dari 500 free tier (24% — aman). Log kini mencetak `JSearch slot v3.9: [...]`.
+
+### 2. Skor kembar skill_fit × deal_fit + knockouts (usul evaluasi #3)
+Prompt juri kini wajib memisah: **skill_fit** (kecocokan teknis/domain) dan
+**deal_fit** (kelayakan deal: region, level, yurisdiksi, kompensasi, bahasa),
+plus daftar **knockouts**. Skor akhir = min(skill, deal); ada knockout → dipatok 25.
+Telegram menampilkan `(skill X • deal Y)` dan baris ⛔ per knockout — deal-breaker
+tidak lagi bersembunyi di balik satu angka.
+
+### 3. Dokumen JD harian via Telegram (usul evaluasi #6)
+Setiap run yang mengirim lowongan juga mengirim **file .md** berisi JD penuh +
+semua jalur apply (utama/karir/email/cross-post) + skor + knockout per lowongan.
+Chat lamaran tidak perlu lagi scraping halaman ber-403/berbayar.
+
+### 4. Kesegaran posting (usul evaluasi #5)
+Kolom baru `daily_jobs.posted_at` (**migration_v3.sql** — jalankan sekali di Supabase
+SQL Editor; ingest punya fallback otomatis bila belum). Notifier melabeli:
+❔ tanggal tak diketahui (mirror agregator) / ⚠️ berumur ≥14 hari.
+
+### 5. Kompensasi & junior (lanjutan v3.8)
+Tanpa perubahan — knockout QB/Xero, lantai US$2.000, dan judul junior tetap aktif.
+
+---
+
 ## Update v3.8 (9 Okt 2026) — lapis knockout terikat profil + kejujuran region & kompensasi
 
 Lahir dari `EVALUASI_TOOL_3_LEAD_BOOKKEEPER.md` (chat asisten lamaran): 3 lead

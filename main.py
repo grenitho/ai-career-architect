@@ -37,18 +37,28 @@ Tugasmu menganalisis kecocokan antara Lowongan dan Profil Kandidat.
 {candidate_notes}
 
 TUGAS ANALISIS:
-1. Berikan skor kecocokan (0-100). Jika profil TIDAK RELEVAN sama sekali dengan JD, skor di bawah 30.
-2. Buat 3 poin "MENGAPA COCOK" atau "MENGAPA TIDAK COCOK" yang spesifik berdasarkan teks di atas.
-3. Identifikasi 1 "Skill Gap" kandidat untuk JD ini.
-4. Berikan 2 "Talking Points" (pertanyaan cerdas) untuk interview.
-5. Tulis "cv_angle": 1 kalimat tentang cara memposisikan pengalaman kandidat (termasuk pengalaman usaha sendiri) agar relevan untuk JD ini.
-6. Nilai "region_eligibility" untuk kandidat di Indonesia (UTC+7): "worldwide", "apac_ok", "restricted" (hanya negara/region tertentu atau wajib jam kerja zona lain yang tidak masuk akal), atau "unclear".
-7. Tandai "suspicious": true jika JD mengindikasikan penipuan (minta bayar di muka, wawancara hanya via chat pribadi, gaji tidak masuk akal untuk tugasnya).
-8. Verifikasi postingan ini benar-benar LOWONGAN KERJA dari pemberi kerja. Jika ini iklan freelancer menawarkan jasa ("for hire", "I am available", "you pay after I fix..."), iklan pencari kerja, atau bukan lowongan sama sekali, set "is_job": false.
+1. Berikan DUA skor terpisah (0-100):
+   - "skill_fit": kesamaan skill, arsitektur, dan domain antara JD dan profil.
+   - "deal_fit": kelayakan kondisi deal untuk kandidat ini: region kerja (Indonesia,
+     UTC+7, TANPA work authorization AS), tipe pekerjaan, level role terhadap
+     pengalaman 20+ tahun, yurisdiksi/lisensi wajib (mis. kepatuhan pajak AS),
+     dan bahasa wajib selain Inggris.
+2. Isi "knockouts": daftar deal-breaker absolut yang kamu temukan (tools wajib yang
+   tidak dimiliki kandidat, syarat kewarganegaraan, onsite wajib, lisensi wajib,
+   kompensasi jelas di bawah US$2.000/bln). List KOSONG bila tidak ada.
+3. Buat 3 poin "MENGAPA COCOK" atau "MENGAPA TIDAK COCOK" yang spesifik berdasarkan teks di atas.
+4. Identifikasi 1 "Skill Gap" kandidat untuk JD ini.
+5. Berikan 2 "Talking Points" (pertanyaan cerdas) untuk interview.
+6. Tulis "cv_angle": 1 kalimat tentang cara memposisikan pengalaman kandidat (termasuk pengalaman usaha sendiri) agar relevan untuk JD ini.
+7. Nilai "region_eligibility" untuk kandidat di Indonesia (UTC+7): "worldwide", "apac_ok", "restricted" (hanya negara/region tertentu atau wajib jam kerja zona lain yang tidak masuk akal), atau "unclear". HANYA gunakan "worldwide" bila teks JD secara eksplisit memuat kata seperti worldwide/anywhere/global/any country.
+8. Tandai "suspicious": true jika JD mengindikasikan penipuan (minta bayar di muka, wawancara hanya via chat pribadi, gaji tidak masuk akal untuk tugasnya).
+9. Verifikasi postingan ini benar-benar LOWONGAN KERJA dari pemberi kerja. Jika ini iklan freelancer menawarkan jasa ("for hire", "I am available", "you pay after I fix..."), iklan pencari kerja, atau bukan lowongan sama sekali, set "is_job": false.
 
 FORMAT OUTPUT (WAJIB JSON VALID):
 {{
-  "score": 25,
+  "skill_fit": 80,
+  "deal_fit": 35,
+  "knockouts": ["contoh: QuickBooks wajib padahal kandidat tidak punya"],
   "match_reasons": ["Alasan 1 yang spesifik", "Alasan 2", "Alasan 3"],
   "skill_gap": "Penjelasan skill gap dan cara mempersiapkannya",
   "interview_talking_points": ["Pertanyaan 1", "Pertanyaan 2"],
@@ -138,7 +148,17 @@ def run_daily_matching():
                 "Anda adalah AI Recruiter ahli. Balas HANYA dengan JSON valid sesuai format yang diminta.",
                 prompt,
             )
-            score = max(0, min(100, int(result.get("score", 0))))
+            # v3.9: skor kembar — skill_fit (kecocokan teknis) dan deal_fit
+            # (kelayakan deal: region, level, yurisdiksi, kompensasi). Skor akhir
+            # = min(keduanya): satu saja jeblok = bukan lead yang layak dikirim.
+            # Kompatibel balik: bila LLM mengirim format lama ("score"), pakai itu.
+            skill = max(0, min(100, int(result.get("skill_fit", result.get("score", 0)))))
+            deal = max(0, min(100, int(result.get("deal_fit", skill))))
+            kos_llm = result.get("knockouts") or []
+            if isinstance(kos_llm, str):
+                kos_llm = [kos_llm]
+            result["knockouts"] = kos_llm
+            score = min(skill, deal)
 
             # v3.8: TEKS JD adalah sumber kebenaran untuk region (evaluasi 3 lead
             # bookkeeper: tag 🌍 tiga kali tidak terbukti di JD). Klaim "worldwide"
@@ -159,10 +179,16 @@ def run_daily_matching():
                 or result.get("region_eligibility") == "restricted"
             ):
                 score = min(score, 25)
+            elif kos_llm:
+                # v3.9: ada knockout yang dilihat juri -> patok, biar notifier aman.
+                score = min(score, 25)
 
             reasoned_count += 1
             consecutive_failures = 0
-            print(f"   ✅ Skor: {score}/100")
+            print(
+                f"   ✅ Skor: {score}/100 (skill {skill} • deal {deal})"
+                + (f" | ⛔ {len(kos_llm)} knockout" if kos_llm else "")
+            )
         except RateBudgetExceeded as e:
             print(f"   🛑 {e} Menghentikan sisa analisis run ini.")
             break
